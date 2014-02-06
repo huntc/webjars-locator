@@ -58,8 +58,11 @@ public class WebJarAssetLocator {
                 throw new IllegalStateException("Got deeper than " + MAX_DIRECTORY_DEPTH + " levels while searching " + rootDirectory);
             }
 
-            for (final File child : file.listFiles()) {
-                aggregateChildren(rootDirectory, child, aggregatedChildren, filterExpr, level + 1);
+            final File[] files = file.listFiles();
+            if (files != null) {
+                for (final File child : files) {
+                    aggregateChildren(rootDirectory, child, aggregatedChildren, filterExpr, level + 1);
+                }
             }
         } else {
             aggregateFile(file, aggregatedChildren, filterExpr);
@@ -199,30 +202,52 @@ public class WebJarAssetLocator {
      * path of the resource.
      *
      * @param partialPath the path to return e.g. "jquery.js" or "abc/someother.js".
-     *                    This must be a distinct path within the index passed in.
+     *                    This must be a distinct path within the index passed in. A
+     *                    path can also be qualified with an artifact-id in order to
+     *                    resolve any ambiguities. // is used to specify artifact-ids
+     *                    e.g. "//bootstrap/bootstrap.js" declares that bootstrap.js
+     *                    of the bootstrap WebJar is to be searched for.
      * @return a fully qualified path to the resource.
      */
     public String getFullPath(final String partialPath) {
-        
-        final String reversePartialPath = reversePath(prependSlash(partialPath));
+
+        String artifactIdPath = null;
+        String unqualifiedPartialPath = partialPath;
+        if (partialPath.length() > 2 && partialPath.startsWith("//")) {
+            int pathPosn = partialPath.indexOf('/', 2);
+            artifactIdPath = WEBJARS_PATH_PREFIX + partialPath.substring(1, pathPosn);
+            unqualifiedPartialPath = partialPath.substring(pathPosn);
+        }
+        final String reversePartialPath = reversePath(prependSlash(unqualifiedPartialPath));
 
         final SortedMap<String, String> fullPathTail = fullPathIndex
                 .tailMap(reversePartialPath);
 
-        if (fullPathTail.size() == 0) {
+        SortedMap<String, String> qualifiedFullPathTail = fullPathTail;
+        if (artifactIdPath != null) {
+            qualifiedFullPathTail = new TreeMap<String, String>();
+            for (Entry<String, String> entry : fullPathTail.entrySet()) {
+                if (entry.getValue().startsWith(artifactIdPath)) {
+                    qualifiedFullPathTail.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+
+
+        if (qualifiedFullPathTail.size() == 0) {
             throwNotFoundException(partialPath);
         }
 
-        final Iterator<Entry<String, String>> fullPathTailIter = fullPathTail
+        final Iterator<Entry<String, String>> qualifiedFullPathTailIter = qualifiedFullPathTail
                 .entrySet().iterator();
-        final Entry<String, String> fullPathEntry = fullPathTailIter.next();
+        final Entry<String, String> fullPathEntry = qualifiedFullPathTailIter.next();
         if (!fullPathEntry.getKey().startsWith(reversePartialPath)) {
             throwNotFoundException(partialPath);
         }
         final String fullPath = fullPathEntry.getValue();
 
-        if (fullPathTailIter.hasNext()
-                && fullPathTailIter.next().getKey()
+        if (qualifiedFullPathTailIter.hasNext()
+                && qualifiedFullPathTailIter.next().getKey()
                 .startsWith(reversePartialPath)) {
             throw new MultipleMatchesException(
                     "Multiple matches found for "

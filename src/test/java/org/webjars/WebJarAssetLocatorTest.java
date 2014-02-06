@@ -23,6 +23,14 @@ public class WebJarAssetLocatorTest {
     }
 
     @Test
+    public void get_paths_of_asset_qualified_with_artifact() {
+        WebJarAssetLocator locator = new WebJarAssetLocator();
+        String jsPath = locator.getFullPath("//bootstrap/bootstrap.js");
+
+        assertEquals("META-INF/resources/webjars/bootstrap/2.2.2/js/bootstrap.js", jsPath);
+    }
+
+    @Test
     public void get_full_path_of_asset_in_root_folder() {
         String jsFullPath = new WebJarAssetLocator().getFullPath("jquery.js");
 
